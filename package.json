@@ -1,0 +1,26 @@
+{
+  "name": "commercepilot-ai",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "start": "npm run start:web --workspace=apps/web",
+    "dev": "npm run dev --workspaces --if-present",
+    "dev:api": "npm run dev --workspace=apps/api",
+    "dev:web": "npm run dev --workspace=apps/web",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "concurrently": "^8.2.0",
+    "vitest": "^1.2.2",
+    "supertest": "^6.3.4",
+    "@types/supertest": "^6.0.2",
+    "@types/node": "^20.11.5"
+  }
+}

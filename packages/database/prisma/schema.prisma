@@ -1,0 +1,224 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Merchant {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  passwordHash  String
+  businessName  String
+  industry      String
+  currency      String    @default("INR")
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  customers     Customer[]
+  products      Product[]
+  transactions  Transaction[]
+  opportunities Opportunity[]
+  campaigns     Campaign[]
+  agentRuns     AgentRun[]
+}
+
+model Customer {
+  id                  String          @id @default(cuid())
+  merchantId          String
+  merchant            Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  externalId          String
+  name                String
+  email               String?
+  phone               String?
+  firstPurchaseAt     DateTime?
+  lastPurchaseAt      DateTime?
+  totalOrders         Int             @default(0)
+  totalSpend          Decimal         @default(0) @db.Decimal(12, 2)
+  averageOrderValue   Decimal         @default(0) @db.Decimal(12, 2)
+  segment             String          @default("NEW")
+  churnScore          Int             @default(0)
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  transactions        Transaction[]
+  events              CustomerEvent[]
+  campaignTargets     CampaignTarget[]
+
+  @@unique([merchantId, externalId])
+  @@index([merchantId, segment])
+  @@index([merchantId, churnScore])
+}
+
+model Product {
+  id          String        @id @default(cuid())
+  merchantId  String
+  merchant    Merchant      @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  name        String
+  category    String
+  price       Decimal       @db.Decimal(12, 2)
+  inventory   Int
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  transactions Transaction[]
+
+  @@index([merchantId, category])
+}
+
+model Transaction {
+  id            String            @id @default(cuid())
+  merchantId    String
+  merchant      Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  customerId    String?
+  customer      Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  amount        Decimal           @db.Decimal(12, 2)
+  currency      String            @default("INR")
+  status        String            @default("SUCCESS")
+  paymentMethod String
+  productId     String?
+  product       Product?          @relation(fields: [productId], references: [id], onDelete: SetNull)
+  createdAt     DateTime          @default(now())
+
+  @@index([merchantId, createdAt])
+  @@index([merchantId, status])
+  @@index([customerId])
+}
+
+model CustomerEvent {
+  id          String      @id @default(cuid())
+  customerId  String
+  customer    Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  eventType   String
+  metadata    Json?
+  createdAt   DateTime    @default(now())
+
+  @@index([customerId, createdAt])
+  @@index([eventType])
+}
+
+model Opportunity {
+  id               String          @id @default(cuid())
+  merchantId       String
+  merchant         Merchant        @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  type             String
+  title            String
+  description      String
+  priority         String          @default("MEDIUM")
+  estimatedRevenue Decimal         @default(0) @db.Decimal(12, 2)
+  confidence       Int             @default(0)
+  status           String          @default("OPEN")
+  metadata         Json?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  campaigns        Campaign[]
+
+  @@index([merchantId, status])
+  @@index([merchantId, type])
+}
+
+model Campaign {
+  id             String            @id @default(cuid())
+  merchantId     String
+  merchant       Merchant          @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  opportunityId  String?
+  opportunity    Opportunity?      @relation(fields: [opportunityId], references: [id], onDelete: SetNull)
+  name           String
+  description    String
+  offer          String
+  targetSegment  String
+  budget         Decimal           @default(0) @db.Decimal(12, 2)
+  expectedRevenue Decimal          @default(0) @db.Decimal(12, 2)
+  expectedROI    Decimal           @default(0) @db.Decimal(6, 2)
+  actualRevenue  Decimal?          @db.Decimal(12, 2)
+  actualROI      Decimal?          @db.Decimal(6, 2)
+  status         String            @default("DRAFT")
+  scheduledAt    DateTime?
+  executedAt     DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  targets        CampaignTarget[]
+  predictions    Prediction[]
+  results        CampaignResult[]
+
+  @@index([merchantId, status])
+}
+
+model CampaignTarget {
+  id               String     @id @default(cuid())
+  campaignId       String
+  campaign         Campaign   @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  customerId       String
+  customer         Customer   @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  status           String     @default("TARGETED")
+  converted        Boolean    @default(false)
+  revenueGenerated Decimal    @default(0) @db.Decimal(12, 2)
+  createdAt        DateTime   @default(now())
+
+  @@unique([campaignId, customerId])
+  @@index([customerId])
+}
+
+model AgentRun {
+  id          String     @id @default(cuid())
+  merchantId  String
+  merchant    Merchant   @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  agentName   String
+  task        String
+  input       Json?
+  output      Json?
+  status      String     @default("RUNNING")
+  durationMs  Int        @default(0)
+  createdAt   DateTime   @default(now())
+
+  toolCalls   ToolCall[]
+
+  @@index([merchantId, createdAt])
+  @@index([agentName])
+}
+
+model ToolCall {
+  id          String    @id @default(cuid())
+  agentRunId  String
+  agentRun    AgentRun  @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+  toolName    String
+  input       Json?
+  output      Json?
+  success     Boolean   @default(true)
+  durationMs  Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@index([agentRunId])
+}
+
+model Prediction {
+  id                   String      @id @default(cuid())
+  campaignId           String
+  campaign             Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  predictedRevenue     Decimal     @db.Decimal(12, 2)
+  predictedConversions Int
+  predictedROI         Decimal     @db.Decimal(6, 2)
+  confidence           Int
+  createdAt            DateTime    @default(now())
+
+  @@index([campaignId])
+}
+
+model CampaignResult {
+  id               String    @id @default(cuid())
+  campaignId       String
+  campaign         Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  actualRevenue    Decimal   @db.Decimal(12, 2)
+  actualConversions Int
+  actualCost       Decimal   @db.Decimal(12, 2)
+  actualROI        Decimal   @db.Decimal(6, 2)
+  predictionError  Decimal   @db.Decimal(6, 2)
+  createdAt        DateTime  @default(now())
+
+  @@index([campaignId])
+}

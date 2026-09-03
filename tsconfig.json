@@ -1,0 +1,15 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true
+  },
+  "references": [
+    { "path": "./apps/api" },
+    { "path": "./apps/web" },
+    { "path": "./packages/agents" },
+    { "path": "./packages/ai" },
+    { "path": "./packages/database" },
+    { "path": "./packages/shared" }
+  ],
+  "exclude": ["node_modules"]
+}
