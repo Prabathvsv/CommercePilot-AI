@@ -1,0 +1,8 @@
+{
+  "buildCommand": "npm install && npm run build --workspace=packages/shared && npm run build --workspace=packages/database && npm run build --workspace=apps/web",
+  "outputDirectory": "apps/web/dist",
+  "installCommand": "npm install",
+  "rewrites": [
+    { "source": "/((?!assets/).*)", "destination": "/index.html" }
+  ]
+}
