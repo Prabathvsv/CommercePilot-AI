@@ -343,41 +343,30 @@ async function main() {
   }
   console.log(`  ✓ ${txns.length.toLocaleString()} transactions created`);
 
-  // 5. Update customer aggregates
+  // 5. Update customer aggregates — use a single SQL aggregation to avoid
+  //    pulling all 27K+ transactions into Node.js memory (critical for remote DBs).
   console.log('  Computing customer segments & RFM...');
 
-  // Recompute customer stats from actual transactions
-  const agg = await prisma.transaction.groupBy({
-    by: ['customerId'],
-    where: { customerId: { not: null }, status: 'SUCCESS' },
-    _count: { id: true },
-    _sum: { amount: true },
-    _max: { createdAt: true },
-    _min: { createdAt: true },
-  });
-
-  const successfulTxns = await prisma.transaction.findMany({
-    where: { customerId: { not: null }, status: 'SUCCESS' },
-    select: { customerId: true, amount: true, createdAt: true },
-  });
-
-  // Build per-customer purchase history for frequency/recency
-  const custHistory = new Map<string, Date[]>();
-  for (const t of successfulTxns) {
-    if (!t.customerId) continue;
-    if (!custHistory.has(t.customerId)) custHistory.set(t.customerId, []);
-    custHistory.get(t.customerId)!.push(t.createdAt);
-  }
+  type AggRow = { customer_id: string; orders: number; spend: number; last_purchase: string | Date };
+  const aggRows: AggRow[] = await prisma.$queryRawUnsafe<AggRow[]>(`
+    SELECT "customerId" AS customer_id,
+           COUNT(*)::int       AS orders,
+           SUM(amount)::float  AS spend,
+           MAX("createdAt")    AS last_purchase
+    FROM "Transaction"
+    WHERE "customerId" IS NOT NULL AND status = 'SUCCESS'
+    GROUP BY "customerId"
+  `);
+  const aggMap = new Map(aggRows.map((r) => [r.customer_id, r]));
 
   const customerData: Prisma.CustomerCreateManyInput[] = [];
 
   for (const c of customers) {
-    const history = (custHistory.get(c.id) ?? []).sort((a, b) => a.getTime() - b.getTime());
-    const stat = agg.find((a) => a.customerId === c.id);
+    const stat = aggMap.get(c.id);
 
-    const orders = stat?._count.id ?? 0;
-    const spend = Number(stat?._sum.amount ?? 0);
-    const last = history.length ? history[history.length - 1] : c.firstPurchaseAt;
+    const orders = stat?.orders ?? 0;
+    const spend = stat?.spend ?? 0;
+    const last = stat?.last_purchase ? new Date(stat.last_purchase) : c.firstPurchaseAt;
     const first = c.firstPurchaseAt;
 
     const daysSinceLast = Math.floor((now - last.getTime()) / dayMs);
@@ -432,25 +421,24 @@ async function main() {
     });
   }
 
-  // Update customers with RFM/segment aggregates (rows already exist from step 3b)
-  const CHUNK = 200;
-  for (let i = 0; i < customerData.length; i += CHUNK) {
-    const batch = customerData.slice(i, i + CHUNK);
-    await prisma.$transaction(
-      batch.map((cd) =>
-        prisma.customer.update({
-          where: { id: cd.id },
-          data: {
-            lastPurchaseAt: cd.lastPurchaseAt,
-            totalOrders: cd.totalOrders,
-            totalSpend: cd.totalSpend,
-            averageOrderValue: cd.averageOrderValue,
-            segment: cd.segment,
-            churnScore: cd.churnScore,
-          },
-        }),
-      ),
-    );
+  // Update customers with RFM/segment aggregates using batch raw SQL UPDATEs
+  // (avoids 10,000 individual Prisma update calls which timeout over remote DBs)
+  // Each batch updates 500 customers in a single SQL statement using CASE/WHEN.
+  const SQL_BATCH = 500;
+  for (let i = 0; i < customerData.length; i += SQL_BATCH) {
+    const batch = customerData.slice(i, i + SQL_BATCH);
+    const ids = batch.map((cd) => `'${cd.id}'`).join(',');
+    const sql = `
+      UPDATE "Customer" SET
+        "lastPurchaseAt" = CASE ${batch.map((cd) => `WHEN id = '${cd.id}' THEN '${cd.lastPurchaseAt.toISOString()}'::timestamp`).join('\n            ')} END,
+        "totalOrders"    = CASE ${batch.map((cd) => `WHEN id = '${cd.id}' THEN ${cd.totalOrders}`).join('\n            ')} END,
+        "totalSpend"     = CASE ${batch.map((cd) => `WHEN id = '${cd.id}' THEN ${Number(cd.totalSpend)}`).join('\n            ')} END,
+        "averageOrderValue" = CASE ${batch.map((cd) => `WHEN id = '${cd.id}' THEN ${Number(cd.averageOrderValue)}`).join('\n            ')} END,
+        "segment"        = CASE ${batch.map((cd) => `WHEN id = '${cd.id}' THEN '${cd.segment}'`).join('\n            ')} END,
+        "churnScore"     = CASE ${batch.map((cd) => `WHEN id = '${cd.id}' THEN ${cd.churnScore}`).join('\n            ')} END
+      WHERE id IN (${ids})
+    `;
+    await prisma.$executeRawUnsafe(sql);
   }
   console.log(`  ✓ ${customerData.length.toLocaleString()} customers updated with segments`);
 
