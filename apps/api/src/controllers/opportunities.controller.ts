@@ -112,7 +112,7 @@ export const analyze = asyncHandler(async (req: Request, res: Response) => {
           priority: opp.priority,
           estimatedRevenue: opp.estimatedRevenue,
           confidence: opp.confidence,
-          metadata: opp.metadata ?? undefined,
+          metadata: (opp.metadata as Record<string, unknown>) ?? undefined,
         },
       });
       created++;
