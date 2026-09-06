@@ -250,16 +250,6 @@ Plus the floating **Merchant Copilot** chat panel on every screen.
 
 ---
 
-## Testing (40+)
-
-- **Unit** — RFM segmentation, churn scoring, ROI simulation, guardrails
-- **Agent** — orchestrator intent detection & planning, tool schema/validation
-- **Integration** — auth, customers, transactions, campaign approval workflow
-- **Security** — JWT, merchant isolation, no-bypass execution, Zod validation
-- **E2E** — the full agentic loop (create → analyze → recommend → campaign → approve → execute → learn)
-
----
-
 ## Future Improvements
 
 - Real payment/campaign provider adapters (Razorpay, email/SMS)
