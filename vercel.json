@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npm install && npm run build --workspace=packages/shared && npx prisma generate --schema=packages/database/prisma/schema.prisma && npm run build --workspace=packages/database && npm run build --workspace=apps/web",
+  "buildCommand": "npm install && npm run build --workspace=packages/shared && npx prisma generate --schema=packages/database/prisma/schema.prisma && npm run build --workspace=packages/database && npm run build --workspace=packages/ai && npm run build --workspace=packages/agents && npm run build --workspace=apps/api && npx esbuild apps/api/src/server.ts --bundle --platform=node --format=cjs --target=node20 --outfile=apps/api/dist/server.bundle.cjs --external:@prisma/client && npm run build --workspace=apps/web",
   "outputDirectory": "apps/web/dist",
   "installCommand": "npm install",
   "rewrites": [
