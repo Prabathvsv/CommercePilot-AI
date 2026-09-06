@@ -56,8 +56,12 @@ export function createApp(): Express {
   return app;
 }
 
-// Start server only when run directly (not when imported for tests)
-const isMain = process.argv[1] && import.meta.url.endsWith(process.argv[1].split('/').pop() ?? '');
+// Start server only when run directly (not when imported for tests).
+// Guard import.meta: under the Vercel CJS bundle import.meta.url is empty.
+const isMain =
+  !!process.argv[1] &&
+  !!import.meta.url &&
+  import.meta.url.endsWith(process.argv[1].split('/').pop() ?? '');
 
 if (isMain) {
   const app = createApp();

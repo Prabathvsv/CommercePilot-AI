@@ -3,12 +3,19 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 // The .env lives at the monorepo root. Resolve it explicitly because
 // `npm run dev --workspace=apps/api` runs with cwd = apps/api, where dotenv's
 // default (cwd-relative) lookup would miss it.
-dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
+//
+// Guard the import.meta.url lookup: Vercel's serverless builder compiles the
+// entry to CommonJS, where import.meta.url is empty (and there is no .env on
+// the platform anyway), so we fall back to dotenv's cwd lookup.
+try {
+  const __dirname = path.dirname(fileURLToPath(import.meta.url));
+  dotenv.config({ path: path.resolve(__dirname, '../../../../.env') });
+} catch {
+  // bundled CommonJS runtime (e.g. Vercel) — no usable module URL
+}
 dotenv.config(); // fallback: a .env in the process cwd wins if present
 
 const envSchema = z.object({
